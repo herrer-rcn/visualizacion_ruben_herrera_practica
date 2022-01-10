@@ -1,0 +1,231 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+#realizamos la lectura de datos del data set en csv, como vemos esta separado por ;
+
+data = read.csv("/Users/rubenherrera/Desktop/dataset practica visualizacion /marketing_campaign.csv",                 
+         header = TRUE,        
+         sep = ";",            
+         quote = "\"",         
+         dec = ".",            
+         fill = TRUE,          
+         comment.char = "",    
+         encoding = "unknown" 
+         )                 
+
+```
+
+```{r}
+library("dplyr")
+#vemos el dataset, todos los campos y que tipo de datos tiene cada variable 
+data
+```
+```{r}
+#Realizamos un summary que nos mostrara las caracteristicas de cada atributo
+#vemos que hay na's en el campo income 
+summary(data)
+#eliminamos los na's 
+data <- na.omit(data)
+
+#podemos ver que se encuentra el ID, que no nos servira para nuestro grafico estidistico #el año de nacimiento, 
+#el grado de estudios ( que realizaremos una factorizacion, asociando cad estudio a un numero y asi poder tratarlo estadisiticamente )
+data_new <- select(data, -ID)
+```
+```{r}
+#convertimos Education, maritalstatus, y dt customer a factores que despues pasaremos a numerico 
+data_new$Education <- as.factor(data_new$Education)     
+head(data_new$Education)
+```
+```{r}
+#convertimos Education, maritalstatus, y dt customer a factores que despues pasaremos a numerico 
+data_new$Dt_Customer <- as.Date(data_new$Dt_Customer)     
+head(data_new$Dt_Customer)
+```
+```{r}
+#convertimos Education, maritalstatus, y dt customer a factores que despues pasaremos a numerico 
+data_new$Marital_Status <- as.factor(data_new$Marital_Status) 
+
+head(data_new$Marital_Status)
+```
+```{r}
+str(data_new)
+```
+
+
+```{r}
+library(ggplot2)
+
+ggplot(data_new) +
+  aes(x =  Income) +
+  geom_histogram(bins = 30L, fill = "#0c4c8a") +
+  theme_minimal()
+```
+```{r}
+
+ggplot(data_new) +
+  aes(x = "", y = Income) +
+  geom_boxplot(fill = "#0c4c8a") +
+  theme_minimal()
+```
+
+
+```{r}
+#creamos una funcion que elimine los outliers de todas las variables 
+
+outliers <- function(x) {
+
+  Q1 <- quantile(x, probs=.25)
+  Q3 <- quantile(x, probs=.75)
+  iqr = Q3-Q1
+
+ upper_limit = Q3 + (iqr*1.5)
+ lower_limit = Q1 - (iqr*1.5)
+
+ x > upper_limit | x < lower_limit
+}
+#y los aplicamos a todas las variables del dataaset
+remove_outliers <- function(data_new, cols = names(data_new)) {
+  for (col in cols) {
+    data_new <- data_new[!outliers(data_new[[col]]),]
+  }
+  data_new
+}
+
+```
+```{r}
+data_new <- remove_outliers(data_new, 'Income')
+#vemos que Education tiene 5 niveles 
+ggplot(data_new) +
+  aes(x = "", y = Education) +
+  geom_boxplot(fill = "#0c4c8a") +
+  theme_minimal()
+```
+```{r}
+
+ggplot(data_new) +
+  aes(x = "", y = Income) +
+  geom_boxplot(fill = "#0c4c8a") +
+  theme_minimal()
+
+```
+```{r}
+#vemos que hay otras variables que deberian ser categoricas, por lo que cambiamos todas las que estan entre 0 y 1 a factor que son todas las relativas a si el cliente ha aceptado la campaña, ha respondido o se ha quejado 
+data_new$AcceptedCmp1 <- as.factor(data_new$AcceptedCmp1)
+data_new$AcceptedCmp2 <- as.factor(data_new$AcceptedCmp2)
+data_new$AcceptedCmp3 <- as.factor(data_new$AcceptedCmp3)
+data_new$AcceptedCmp4 <- as.factor(data_new$AcceptedCmp4)
+data_new$AcceptedCmp5 <- as.factor(data_new$AcceptedCmp5)
+data_new$Response <- as.factor(data_new$Response)
+data_new$Complain <- as.factor(data_new$Complain)
+```
+
+```{r}
+#eliminamos tambien dos variables qyue son z cos contact y z revenue que no aportan informacion 
+data_new <- select(data_new, -Z_CostContact, -Z_Revenue)
+
+```
+```{r}
+#tambien eliminamos a las personas nacidas antes del 1920 por considerarse un error
+data_new<- data_new[data_new$Year_Birth > 1920,]  
+summary(data_new)
+```
+```{r}
+ggplot(data_new) +
+  aes(x =  Income) +
+  geom_histogram(bins = 30L, fill = "#0c4c8a") +
+  theme_minimal()
+library("dplyr")
+data_num <- dplyr::select_if(data_new, is.numeric)
+data_fac <- dplyr::select_if(data_new, is.factor)
+library("corrgram")
+#visualizamos un diagrama de correlación donde vemos la dependencia que tiene cada variable con otra 
+corrgram::corrgram(data_num)
+```
+
+```{r}
+#realizamos una visualización diferente que creemos es mas comprensible 
+#los punto mas oscuros tanto como azules como rojos son los mas correlacionados
+#los azules son proporcionales, los rojos inversamente proporcionales 
+corrplot::corrplot(cor(data_num),dim = c(12, 10))
+
+```
+```{r}
+#vemos ahora si hay correlacion entre el nacimiento de cda usuario y el num de visitas a la web, vemos que es casi constante
+(g <- ggplot(data_new, aes(x = Year_Birth, y = NumWebVisitsMonth)))
+g + geom_point(color = "firebrick", shape = "diamond", size = 2) +stat_summary(aes(y = NumWebVisitsMonth,group=1), fun=mean, colour="red", geom="line",group=1)
+```
+```{r}
+#creamos ahora subsets de cada campaña de marketing donde los usuarios han aceptado , realizando un sumatorio de los productos comprados por cada usuario, y viendo la media de ingresos y el año de nacimiento 
+#dichos datos los usaremos en flourish para realizar un grafico 
+campanya1<- data_new[data_new$AcceptedCmp1 == 1 ,] 
+colSums(Filter(is.numeric, campanya1))
+mean(campanya1$Year_Birth)
+mean(campanya1$Income)
+```
+```{r}
+campanya2<- data_new[data_new$AcceptedCmp2 == 1,] 
+colSums(Filter(is.numeric, campanya2))
+mean(campanya2$Year_Birth)
+mean(campanya2$Income)
+```
+```{r}
+campanya3<- data_new[data_new$AcceptedCmp3 == 1,] 
+colSums(Filter(is.numeric, campanya3))
+mean(campanya3$Year_Birth)
+mean(campanya3$Income)
+```
+```{r}
+campanya4<- data_new[data_new$AcceptedCmp4 == 1,] 
+colSums(Filter(is.numeric, campanya4))
+mean(campanya4$Year_Birth)
+mean(campanya4$Income)
+```
+```{r}
+campanya5<- data_new[data_new$AcceptedCmp5 == 1,] 
+colSums(Filter(is.numeric, campanya5))
+mean(campanya5$Year_Birth)
+mean(campanya5$Income)
+```
+```{r}
+write.csv(campanya1, "campaign1.csv")
+```
+```{r}
+
+#vemos que cuanto mas joven es el usuario menos pescado consume y menos oro compra 
+data_new %>% ggplot(aes(x = Year_Birth, y = MntFishProducts)) + 
+    geom_point(aes(colour = Education)) + geom_smooth(method='lm')  + ggtitle(label = 'Consumo de Pescado segun el año de nacimineto ') +
+  theme_bw()
+data_new %>% ggplot(aes(x = Year_Birth, y = MntGoldProds)) + 
+    geom_point(aes(colour = Education)) + geom_smooth(method='lm')+ ggtitle(label = 'Compra de productos de oro segun el año de nacimineto ') +
+  theme_bw()
+data_new %>% ggplot(aes(x = Year_Birth, y = MntMeatProducts)) + 
+    geom_point(aes(colour = Education)) + geom_smooth(method='lm')+ ggtitle(label = 'Compra de productos de Carne segun el año de nacimineto ') +
+  theme_bw()
+```
+```{r}
+#vemos que cuanto mas joven el comprador menos compra en la tienda 
+data_new %>% ggplot(aes(x = Year_Birth, y = NumStorePurchases)) + 
+    geom_point(aes(colour = Marital_Status)) + geom_smooth(method='lm')  + ggtitle(label = 'Compra en la tienda  segun el año de nacimineto ') +
+  theme_bw()
+
+#como hemos visto en el diagrama de correlacion esta muy realacionado que cuanto mas ingresos menos visitas web al mes 
+data_new %>% ggplot(aes(x = Income, y = NumWebVisitsMonth)) + geom_smooth(method='lm')  + geom_point(aes(colour = NumWebVisitsMonth)) + ggtitle(label = 'NOSA ') +
+  theme_bw()
+
+data_new %>% ggplot(aes(x = MntMeatProducts, y = NumCatalogPurchases)) + geom_smooth(method='lm')  + geom_point(aes(colour = NumWebVisitsMonth)) + ggtitle(label = 'NOSA ') +
+  theme_bw()
+```
+```{r}
+#install.packages("tidyverse")
+library(tidyverse)
+
+ggplot(data_new, aes(x = Year_Birth, y = Income)) + geom_point(aes(color = NumWebVisitsMonth)) + 
+    theme_classic()
+```
